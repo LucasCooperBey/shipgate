@@ -156,6 +156,8 @@ PYEOF
     # .venv/, node_modules/) stay out of this scan, as they stay out of a push. The files are
     # copied to a temp dir because `gitleaks dir` does not read .gitignore.
     GITLEAKS_TREE="$(mktemp -d "${TMPDIR:-/tmp}/ship-gate-tree.XXXXXX")"
+    # The copy can hold plaintext keys, so it goes on any exit, Ctrl-C included.
+    trap 'rm -rf "$GITLEAKS_TREE"' EXIT
     if (cd "$GIT_ROOT" && git ls-files -z --cached --others --exclude-standard \
           | while IFS= read -r -d '' f; do if [ -f "$f" ]; then printf '%s\0' "$f"; fi; done \
           | tar -cf - --null -T -) | tar -xf - -C "$GITLEAKS_TREE"; then
@@ -177,6 +179,7 @@ PYEOF
       fail "gitleaks dir: could not copy the working tree to scan it"
     fi
     rm -rf "$GITLEAKS_TREE"
+    trap - EXIT
   else
     # Non-git: filesystem dir scan
     if gitleaks dir \
