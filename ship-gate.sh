@@ -5,7 +5,8 @@
 # Usage:   ship-gate.sh <path-or-jobdir>
 #
 # Gates (all must pass; exit nonzero = block):
-#   (a) gitleaks dir/git: secret scan on filesystem + git history
+#   (a) gitleaks dir/git: secret scan on git history + every file a commit could carry
+#       (a plain folder is scanned whole)
 #   (b) trufflehog filesystem/git: verified-secrets scan + git history
 #   (c) LICENSE: present, holds a known license's grant text, no SPDX line inside it
 #   (d) credit-check: flag un-attributed derivative content
@@ -150,21 +151,32 @@ PYEOF
       fi
     fi
     # `gitleaks git` reads commits only, so a key in a staged, modified or untracked file
-    # would pass it. Scan the working tree as well, as the non-git branch below does.
-    if gitleaks dir \
-        --no-banner \
-        --redact \
-        --report-path "$GITLEAKS_OUT" \
-        --report-format json \
-        "$GIT_ROOT" 2>&1 | grep -vE '^$|^time='; then
-      pass "gitleaks dir: no secrets found in the working tree"
-    else
-      fail "gitleaks dir: secret(s) detected in the working tree"
-      if [ -s "$GITLEAKS_OUT" ]; then
-        echo -e "${RED}  Findings:${RESET}"
-        _gitleaks_show_findings "$GITLEAKS_OUT"
+    # would pass it. Scan every file a commit could carry as well: tracked files as they are
+    # on disk plus untracked files that .gitignore does not exclude. Ignored folders (dist/,
+    # .venv/, node_modules/) stay out of this scan, as they stay out of a push. The files are
+    # copied to a temp dir because `gitleaks dir` does not read .gitignore.
+    GITLEAKS_TREE="$(mktemp -d "${TMPDIR:-/tmp}/ship-gate-tree.XXXXXX")"
+    if (cd "$GIT_ROOT" && git ls-files -z --cached --others --exclude-standard \
+          | while IFS= read -r -d '' f; do if [ -f "$f" ]; then printf '%s\0' "$f"; fi; done \
+          | tar -cf - --null -T -) | tar -xf - -C "$GITLEAKS_TREE"; then
+      if (cd "$GITLEAKS_TREE" && gitleaks dir \
+          --no-banner \
+          --redact \
+          --report-path "$GITLEAKS_OUT" \
+          --report-format json \
+          .) 2>&1 | grep -vE '^$|^time='; then
+        pass "gitleaks dir: no secrets found in the working tree"
+      else
+        fail "gitleaks dir: secret(s) detected in the working tree"
+        if [ -s "$GITLEAKS_OUT" ]; then
+          echo -e "${RED}  Findings:${RESET}"
+          _gitleaks_show_findings "$GITLEAKS_OUT"
+        fi
       fi
+    else
+      fail "gitleaks dir: could not copy the working tree to scan it"
     fi
+    rm -rf "$GITLEAKS_TREE"
   else
     # Non-git: filesystem dir scan
     if gitleaks dir \

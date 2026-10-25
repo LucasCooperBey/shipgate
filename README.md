@@ -6,7 +6,7 @@ Four checks, each must pass:
 
 | Gate | Checks |
 |---|---|
-| **(a) gitleaks** | filesystem **+ git history** secret scan |
+| **(a) gitleaks** | secret scan on **git history** plus every file a commit could carry: tracked files as they are on disk and untracked files `.gitignore` does not exclude (a plain folder is scanned whole) |
 | **(b) trufflehog** | verified-secrets scan, filesystem + git history |
 | **(c) LICENSE** | a `LICENSE`/`COPYING` file exists and holds a known license's grant text (warns on a name-only stub, unfilled placeholders such as `[year]`, or an SPDX line inside it, since that can stop GitHub naming the license), and **no raw `.env`** snuck in |
 | **(d) attribution** | if content is flagged derivative (`DERIVATIVE.md`, `derivative: true`, or `responding-to:` frontmatter) it requires a `CREDIT.md`/`ATTRIBUTION.md`; nudges for an AI-assist disclosure |
