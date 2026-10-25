@@ -40,6 +40,16 @@ header(){ echo -e "\n${BOLD}══ $* ══${RESET}"; }
 HARD_FAIL=0
 SCANNERS_MISSING=()
 
+# Scanner reports can hold findings and the working-tree copy can hold plaintext keys, so
+# every temp path goes on any exit, Ctrl-C included. `|| true` keeps a failed cleanup from
+# changing the gate's verdict.
+GITLEAKS_OUT=""
+GITLEAKS_TREE=""
+TRUFFLE_FS_OUT=""
+TRUFFLE_GIT_OUT=""
+_cleanup() { rm -rf "$GITLEAKS_TREE" "$GITLEAKS_OUT" "$TRUFFLE_FS_OUT" "$TRUFFLE_GIT_OUT" 2>/dev/null || true; }
+trap _cleanup EXIT
+
 # ── Argument validation ───────────────────────────────────────────────────────
 if [ $# -lt 1 ]; then
   echo "Usage: ship-gate.sh <path-or-jobdir>"
@@ -98,9 +108,10 @@ else
   info "gitleaks $(gitleaks version 2>/dev/null || echo '(version unknown)')"
 
   # macOS BSD mktemp only substitutes XXXXXX when it is the TRAILING part of the
-  # template (a ".txt" suffix makes it a literal filename → collisions on re-run).
-  # Use the portable `-t` form (works on both BSD/macOS and GNU/Linux).
-  GITLEAKS_OUT="$(mktemp -t ship-gate-gitleaks)"
+  # template (a ".txt" suffix makes it a literal filename → collisions on re-run), and
+  # GNU mktemp refuses a template with no XXXXXX at all ("too few X's"), so `-t name`
+  # stops the script on Linux. A full path ending in XXXXXX works on both.
+  GITLEAKS_OUT="$(mktemp "${TMPDIR:-/tmp}/ship-gate-gitleaks.XXXXXX")"
 
   # gitleaks v8 CLI: `gitleaks git <path>` for repos, `gitleaks dir <path>` for plain dirs.
   # (The old `detect --source --no-git` syntax was removed in v8.x.)
@@ -156,8 +167,6 @@ PYEOF
     # .venv/, node_modules/) stay out of this scan, as they stay out of a push. The files are
     # copied to a temp dir because `gitleaks dir` does not read .gitignore.
     GITLEAKS_TREE="$(mktemp -d "${TMPDIR:-/tmp}/ship-gate-tree.XXXXXX")"
-    # The copy can hold plaintext keys, so it goes on any exit, Ctrl-C included.
-    trap 'rm -rf "$GITLEAKS_TREE"' EXIT
     if (cd "$GIT_ROOT" && git ls-files -z --cached --others --exclude-standard \
           | while IFS= read -r -d '' f; do if [ -f "$f" ]; then printf '%s\0' "$f"; fi; done \
           | tar -cf - --null -T -) | tar -xf - -C "$GITLEAKS_TREE"; then
@@ -179,7 +188,6 @@ PYEOF
       fail "gitleaks dir: could not copy the working tree to scan it"
     fi
     rm -rf "$GITLEAKS_TREE"
-    trap - EXIT
   else
     # Non-git: filesystem dir scan
     if gitleaks dir \
@@ -215,9 +223,9 @@ if [ -z "$TRUFFLEHOG_BIN" ]; then
 else
   info "trufflehog $(trufflehog --version 2>&1 | head -1)"
 
-  # Portable mktemp (-t); see the note in GATE (a) above about macOS BSD behavior.
-  TRUFFLE_FS_OUT="$(mktemp -t ship-gate-truffle-fs)"
-  TRUFFLE_GIT_OUT="$(mktemp -t ship-gate-truffle-git)"
+  # Portable mktemp; see the note in GATE (a) above about BSD and GNU behavior.
+  TRUFFLE_FS_OUT="$(mktemp "${TMPDIR:-/tmp}/ship-gate-truffle-fs.XXXXXX")"
+  TRUFFLE_GIT_OUT="$(mktemp "${TMPDIR:-/tmp}/ship-gate-truffle-git.XXXXXX")"
   TRUFFLE_FAILED=0
 
   # (b1) filesystem scan
