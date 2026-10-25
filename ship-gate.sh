@@ -134,7 +134,7 @@ PYEOF
   }
 
   if [ $IS_GIT -eq 1 ]; then
-    # Scan git repo (staged + working tree + history)
+    # Scan git history (every commit)
     if gitleaks git \
         --no-banner \
         --redact \
@@ -144,6 +144,22 @@ PYEOF
       pass "gitleaks git: no secrets found in repo"
     else
       fail "gitleaks git: secret(s) detected in repo/history"
+      if [ -s "$GITLEAKS_OUT" ]; then
+        echo -e "${RED}  Findings:${RESET}"
+        _gitleaks_show_findings "$GITLEAKS_OUT"
+      fi
+    fi
+    # `gitleaks git` reads commits only, so a key in a staged, modified or untracked file
+    # would pass it. Scan the working tree as well, as the non-git branch below does.
+    if gitleaks dir \
+        --no-banner \
+        --redact \
+        --report-path "$GITLEAKS_OUT" \
+        --report-format json \
+        "$GIT_ROOT" 2>&1 | grep -vE '^$|^time='; then
+      pass "gitleaks dir: no secrets found in the working tree"
+    else
+      fail "gitleaks dir: secret(s) detected in the working tree"
       if [ -s "$GITLEAKS_OUT" ]; then
         echo -e "${RED}  Findings:${RESET}"
         _gitleaks_show_findings "$GITLEAKS_OUT"
