@@ -21,7 +21,7 @@ Secrets-in-git-history is the #1 way OSS releases leak credentials, and it survi
 
 ```bash
 brew install gitleaks trufflehog        # the scanners (ShipGate warns if missing)
-git clone https://github.com/Lucface/shipgate.git
+git clone https://github.com/LucasCooperBey/shipgate.git
 cp shipgate/ship-gate.sh ~/.local/bin/  # or anywhere on PATH
 ```
 
@@ -50,4 +50,4 @@ Now `git push` runs the gate first and aborts on any hard finding. (Note: `--no-
 
 ## License
 
-MIT. See [LICENSE](./LICENSE). By [@Lucface](https://github.com/Lucface). Extracted clean from a larger private release pipeline.
+MIT. See [LICENSE](./LICENSE). By [@LucasCooperBey](https://github.com/LucasCooperBey). Extracted clean from a larger private release pipeline.
