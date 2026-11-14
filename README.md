@@ -48,6 +48,33 @@ chmod +x "$H"
 
 Now `git push` runs the gate first and aborts on any hard finding. (Note: `--no-verify` skips the hook, so the gate catches mistakes and cannot stop a deliberate bypass.)
 
+## Example
+
+A repo at `/path/to/leaky` where a key was committed and then deleted, with no LICENSE yet. Run from inside it:
+
+```bash
+ship-gate.sh .
+```
+
+```
+══ GATE (a): gitleaks filesystem scan ══
+[FAIL] gitleaks git: secret(s) detected in repo/history
+  Findings:
+  1. [stripe-access-token] config.py:1  →  REDACTED"...
+[PASS] gitleaks dir: no secrets found in the working tree
+
+══ GATE (b): trufflehog verified-secrets scan ══
+[PASS] trufflehog filesystem: no verified secrets
+[PASS] trufflehog git history: no verified secrets
+
+══ GATE (c): LICENSE + SPDX ══
+[FAIL] No LICENSE file found in /path/to/leaky. Every public ship needs a license.
+
+GATE: BLOCKED. Fix all [FAIL] items above before publishing.
+```
+
+The second commit deleted `config.py`, but the first commit still holds the key, so the gate blocks. It exits 1. The same command on a repo with an MIT LICENSE and no secrets prints `GATE: PASS` and exits 0. trufflehog passes here because it reports only keys it can verify, and this one was made up.
+
 ## License
 
 MIT. See [LICENSE](./LICENSE). By [@LucasCooperBey](https://github.com/LucasCooperBey). Extracted clean from a larger private release pipeline.
